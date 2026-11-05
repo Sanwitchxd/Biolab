@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+# Secretos y datos locales (los genera el instalador)
+.env
+!.env.example
+backend/uploads/
+database/CREDENCIALES.txt
+database/.env
+database/runtime/

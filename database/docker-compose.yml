@@ -1,0 +1,17 @@
+# BioLab - MySQL 8.4 LTS local con Docker
+# Uso:  docker compose up -d
+services:
+  biolab-mysql:
+    image: mysql:8.4
+    container_name: biolab-mysql
+    restart: unless-stopped
+    env_file: .env                       # define MYSQL_ROOT_PASSWORD
+    command: ["--default-time-zone=-06:00", "--event-scheduler=ON",
+              "--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    ports:
+      - "127.0.0.1:3306:3306"            # solo accesible desde este equipo
+    volumes:
+      - biolab_data:/var/lib/mysql
+      - ./schema:/docker-entrypoint-initdb.d:ro   # se ejecuta 01..04 en el primer arranque
+volumes:
+  biolab_data:

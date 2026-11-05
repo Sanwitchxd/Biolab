@@ -1,0 +1,10 @@
+{
+  "description": "A clinical laboratory management dashboard for authorized staff to handle reception, lab workflows, user administration, payments, and reporting in one place.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

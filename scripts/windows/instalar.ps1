@@ -285,6 +285,10 @@ try {
   $back = Join-Path $Raiz "backend"
   Instalar-Dependencias $back
   $envFile = Join-Path $back ".env"
+  if ((Test-Path $envFile) -and -not (Select-String -Path $envFile -Pattern "^JWT_SECRET=.+" -Quiet)) {
+    Aviso "backend\.env existe pero esta incompleto: se vuelve a generar"
+    Remove-Item $envFile -Force
+  }
   if (Test-Path $envFile) {
     Ok "backend\.env ya existe: se conserva"
     $linea = Select-String -Path $envFile -Pattern "^DB_PORT=" | Select-Object -First 1

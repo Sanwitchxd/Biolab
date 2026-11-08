@@ -28,15 +28,25 @@ if (!/^\d{2,5}$/.test(puertoArg) || Number(puertoArg) > 65535) {
 if (fs.existsSync(destino) && !forzar) {
   salir("Ya existe backend/.env; no lo toqué. Si quieres regenerarlo usa:  npm run crear-env -- --force");
 }
-if (!fs.existsSync(origen)) {
-  salir(`No encuentro ${origen}\nCopia .env.example a .env y complétalo a mano.`);
-}
-
-// Filas como: "Gerente       gerente_biolab       <contraseña>      rol_gerente"
+// Las cuentas se leen de database/CREDENCIALES.txt; si no existe (p. ej. al clonar el repositorio, donde ese
+// archivo no se sube) se toman de las líneas CREATE USER de database/schema/03_roles_permisos.sql.
 const cuentas = {};
-for (const linea of fs.readFileSync(origen, "utf8").split(/\r?\n/)) {
-  const m = linea.match(/^\s*(Gerente|Recepcionista|Químico)\s+([A-Za-z0-9_]+_biolab)\s+(\S+)/u);
-  if (m) cuentas[m[1]] = { user: m[2], password: m[3] };
+if (fs.existsSync(origen)) {
+  // Filas como: "Gerente       gerente_biolab       <contraseña>      rol_gerente"
+  for (const linea of fs.readFileSync(origen, "utf8").split(/\r?\n/)) {
+    const m = linea.match(/^\s*(Gerente|Recepcionista|Químico)\s+([A-Za-z0-9_]+_biolab)\s+(\S+)/u);
+    if (m) cuentas[m[1]] = { user: m[2], password: m[3] };
+  }
+} else {
+  const sql = path.resolve(backend, "..", "database", "schema", "03_roles_permisos.sql");
+  if (!rutaArg && fs.existsSync(sql)) {
+    const ROL = { gerente_biolab: "Gerente", recepcion_biolab: "Recepcionista", quimico_biolab: "Químico" };
+    for (const m of fs.readFileSync(sql, "utf8").matchAll(/CREATE USER IF NOT EXISTS '([A-Za-z0-9_]+_biolab)'@'[^']*'\s+IDENTIFIED BY '([^']+)'/g)) {
+      if (ROL[m[1]]) cuentas[ROL[m[1]]] = { user: m[1], password: m[2] };
+    }
+  } else {
+    salir(`No encuentro ${origen}\nCopia .env.example a .env y complétalo a mano.`);
+  }
 }
 const faltan = ["Gerente", "Recepcionista", "Químico"].filter((r) => !cuentas[r]);
 if (faltan.length) salir(`No pude leer las cuentas de: ${faltan.join(", ")}. Revisa el formato de CREDENCIALES.txt.`);

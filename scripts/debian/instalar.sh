@@ -184,6 +184,10 @@ fi
 paso "Backend (API)"
 cd "$RAIZ/backend"
 npm_dependencias
+if [ -f .env ] && ! grep -qE '^JWT_SECRET=.+' .env; then
+  aviso "backend/.env existe pero está incompleto: se vuelve a generar"
+  rm -f .env
+fi
 if [ -f .env ]; then
   ok "backend/.env ya existe: se conserva"
   actual="$(grep -E '^DB_PORT=' .env | cut -d= -f2 | tr -d '"' || true)"

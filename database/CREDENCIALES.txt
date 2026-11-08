@@ -1,0 +1,33 @@
+=====================================================================
+ BioLab - CREDENCIALES INICIALES        *** CONFIDENCIAL ***
+ Genere contraseñas nuevas antes de usar el sistema con datos reales.
+ No suba este archivo a GitHub ni lo comparta por chat.
+=====================================================================
+
+1) CUENTAS DE CONEXIÓN A LA BASE DE DATOS  (las usa el software; base: biolab)
+---------------------------------------------------------------------
+ Rol           Usuario MySQL        Contraseña              Rol MySQL
+ Gerente       gerente_biolab       0pLtk=eo_oXHMpsFdGNc    rol_gerente
+ Recepcionista recepcion_biolab     Ds0iXdlFGEoHpPaoXUIa    rol_recepcionista
+ Químico       quimico_biolab       p9ba3JHbX4+#QQjhuW-4    rol_quimico
+
+ Servidor: 127.0.0.1   Puerto: 3306   Base: biolab
+
+2) USUARIOS DE LA APLICACIÓN  (tabla USUARIO; inicio de sesión en BioLab)
+---------------------------------------------------------------------
+ Rol           nombre_usuario   Contraseña
+ Gerente       gerente01        pvF3zGTnE9Fviy
+ Recepcionista recepcion01      J0BNn.y44#ernY
+ Químico       quimico01        +sLxKnB6-SwUAw
+ (en la base solo se guarda el hash bcrypt, nunca la contraseña en claro)
+
+3) ADMINISTRADOR DEL SERVIDOR MySQL (solo para la opción Docker)
+---------------------------------------------------------------------
+ Usuario: root     Contraseña: IgJOAfl=bbmPO%3fK+mb   (archivo .env)
+ En instalación nativa, root usa la contraseña que usted defina al instalar MySQL.
+
+4) CADENAS DE CONEXIÓN DE EJEMPLO
+---------------------------------------------------------------------
+ mysql://gerente_biolab:0pLtk=eo_oXHMpsFdGNc@127.0.0.1:3306/biolab
+ mysql://recepcion_biolab:Ds0iXdlFGEoHpPaoXUIa@127.0.0.1:3306/biolab
+ mysql://quimico_biolab:p9ba3JHbX4+#QQjhuW-4@127.0.0.1:3306/biolab

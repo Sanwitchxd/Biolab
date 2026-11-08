@@ -1,10 +1,9 @@
 node_modules/
 dist/
 *.log
-# Secretos y datos locales (los genera el instalador)
+# Secretos y datos locales (los genera el instalador). database/CREDENCIALES.txt SÍ se sube: son cuentas de ejemplo que se deben cambiar.
 .env
 !.env.example
 backend/uploads/
-database/CREDENCIALES.txt
 database/.env
 database/runtime/

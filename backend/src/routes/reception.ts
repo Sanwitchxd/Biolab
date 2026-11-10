@@ -43,6 +43,25 @@ function monto(valor: unknown, que: string, permitirCero = false): number {
   return centavos(n) / 100;
 }
 
+const NOMBRE_RE = /^[\p{L}][\p{L} .'’-]*$/u;
+
+/** Nombre de persona: solo letras, espacios, punto, apóstrofo y guion; sin espacios repetidos. */
+function nombrePersona(valor: unknown): string {
+  const t = texto(valor, 100, "El nombre del paciente", 3).replace(/\s+/g, " ");
+  if (!NOMBRE_RE.test(t)) throw new HttpError(400, "El nombre solo puede llevar letras, espacios, punto, apóstrofo y guion.", "DATOS_INVALIDOS");
+  return t;
+}
+
+/** El teléfono es opcional: vacío = sin teléfono (y por tanto sin WhatsApp). Si se escribe, deben ser 10 dígitos. */
+function telefonoOpcional(valor: unknown, whatsapp: boolean): { telefono: string | null; whatsapp: boolean } {
+  const bruto = String(valor ?? "").trim();
+  if (/[^\d\s()+-]/.test(bruto)) throw new HttpError(400, "El teléfono solo puede llevar números.", "DATOS_INVALIDOS");
+  const d = bruto.replace(/\D/g, "");
+  if (d === "") return { telefono: null, whatsapp: false };
+  if (d.length !== 10) throw new HttpError(400, "El teléfono debe tener exactamente 10 dígitos (o déjalo vacío si no tiene).", "DATOS_INVALIDOS");
+  return { telefono: d, whatsapp };
+}
+
 function metodoPago(valor: unknown): Metodo {
   if (!METODOS.includes(valor as Metodo)) throw new HttpError(400, "La forma de pago no es válida.", "DATOS_INVALIDOS");
   return valor as Metodo;
@@ -118,13 +137,12 @@ receptionRouter.get("/datos", async (req, res) => {
 receptionRouter.patch("/pacientes/:id", async (req, res) => {
   const id = idPositivo(req.params.id, "El paciente");
   const b = (req.body ?? {}) as Record<string, unknown>;
-  const nombre = texto(b.nombre, 100, "El nombre del paciente");
-  const telefono = String(b.telefono ?? "").replace(/\D/g, "");
-  if (telefono.length !== 10) throw new HttpError(400, "El teléfono debe tener 10 dígitos.", "DATOS_INVALIDOS");
+  const nombre = nombrePersona(b.nombre);
+  const { telefono, whatsapp: conWhatsapp } = telefonoOpcional(b.telefono, b.whatsapp === true);
   const filas = await withConnection("Recepcionista", req.user!.id, async (conn) => {
     const [r] = await conn.query<ResultSetHeader>(
       "UPDATE PACIENTE SET nombre_completo = ?, telefono = ?, tiene_whatsapp = ? WHERE id_paciente = ?",
-      [nombre, telefono, b.whatsapp === true, id],
+      [nombre, telefono, conWhatsapp, id],
     );
     return r.affectedRows;
   });
@@ -140,12 +158,18 @@ receptionRouter.patch("/pacientes/:id", async (req, res) => {
  */
 receptionRouter.post("/citas", async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
-  const nombre = texto(b.nombre, 100, "El nombre del paciente");
-  const telefono = String(b.telefono ?? "").replace(/\D/g, "");
-  if (telefono.length !== 10) throw new HttpError(400, "El teléfono debe tener 10 dígitos.", "DATOS_INVALIDOS");
-  const whatsapp = b.whatsapp === true;
+  const nombre = nombrePersona(b.nombre);
+  const { telefono, whatsapp } = telefonoOpcional(b.telefono, b.whatsapp === true);
   const fechaCita = new Date(String(b.fechaCita ?? ""));
   if (Number.isNaN(fechaCita.getTime())) throw new HttpError(400, "La fecha y hora de la cita no son válidas.", "DATOS_INVALIDOS");
+  if (fechaCita.getTime() < Date.now() - 5 * 60_000) throw new HttpError(400, "La fecha y hora de la cita no pueden estar en el pasado.", "DATOS_INVALIDOS");
+  if (fechaCita.getTime() > Date.now() + 366 * 86_400_000) throw new HttpError(400, "La cita no puede agendarse con más de un año de anticipación.", "DATOS_INVALIDOS");
+  {
+    // Horario de atención 07:00 a 20:00 h (hora de México, UTC-6)
+    const mx = new Date(fechaCita.getTime() - 6 * 3600_000);
+    const minutos = mx.getUTCHours() * 60 + mx.getUTCMinutes();
+    if (minutos < 7 * 60 || minutos > 20 * 60) throw new HttpError(400, "El horario de atención es de 07:00 a 20:00 h.", "DATOS_INVALIDOS");
+  }
 
   const crudos = Array.isArray(b.estudios) ? b.estudios : [];
   const estudios = [...new Set(crudos.map((x) => idPositivo(x, "Uno de los estudios")))];
@@ -185,7 +209,7 @@ receptionRouter.post("/citas", async (req, res) => {
     let actualizarContacto = false;
     if (ex[0]) {
       idPaciente = ex[0].id_paciente as number;
-      actualizarContacto = ex[0].telefono !== telefono || Boolean(ex[0].tiene_whatsapp) !== whatsapp;
+      actualizarContacto = (ex[0].telefono ?? null) !== telefono || Boolean(ex[0].tiene_whatsapp) !== whatsapp;
     } else {
       const [ins] = await conn.query<ResultSetHeader>(
         "INSERT INTO PACIENTE (nombre_completo, telefono, tiene_whatsapp) VALUES (?, ?, ?)",

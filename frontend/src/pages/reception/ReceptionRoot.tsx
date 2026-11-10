@@ -4,6 +4,7 @@ import Shell, { type ShellNotice } from "../../components/layout/Shell";
 import { dateTimeLabel } from "../../utils/format";
 import { useNotifications } from "../../services/notifications";
 import { useChatSummary } from "../../services/chat";
+import { useAutoRefresh } from "../../services/autorefresh";
 import { identityOf, type SessionUser } from "../../services/session";
 import type { ReceptionAction, RoleAction } from "../../types";
 import Reception from "./Reception";
@@ -36,6 +37,9 @@ export default function ReceptionRoot({ user, onLogout }: { user: SessionUser; o
     badge: `${n.channel} · ${n.state}`,
     attendable: n.state === "Pendiente",
   }));
+
+  // Los cambios que hacen los otros perfiles aparecen solos, sin recargar la página.
+  useAutoRefresh(async () => { await reload(); await refresh(); }, status === "ready", 8000);
 
   return (
     <Shell

@@ -3,6 +3,7 @@ import { Button } from "../../components/ui/FormControls";
 import Shell from "../../components/layout/Shell";
 import { identityOf, type SessionUser } from "../../services/session";
 import { useChatSummary } from "../../services/chat";
+import { useAutoRefresh } from "../../services/autorefresh";
 import type { LaboratoryAction, RoleAction } from "../../types";
 import Laboratory from "./Laboratory";
 import { useLabStore } from "./store";
@@ -21,6 +22,9 @@ export default function LaboratoryRoot({ user, onLogout }: { user: SessionUser; 
     reload().catch(() => { /* se conservan los datos que ya se muestran */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAction]);
+
+  // Los cambios que hacen los otros perfiles aparecen solos, sin recargar la página.
+  useAutoRefresh(reload, status === "ready", 8000);
 
   return (
     <Shell activePage="laboratory" identity={identity} activeAction={activeAction} onAction={setActiveAction} onLogout={onLogout} badges={{ messages: chat.unread }}>

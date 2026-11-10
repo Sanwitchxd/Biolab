@@ -32,6 +32,9 @@ export default function PayrollSection({ user, payroll, onSetSalary, onPay }: Pr
     e.preventDefault();
     const n = Number(salary);
     if (!Number.isFinite(n) || n <= 0) { setError("Escribe un sueldo mayor a 0."); return; }
+    if (n > 1_000_000) { setError("El sueldo no puede pasar de 1,000,000."); return; }
+    if (Math.round(n * 100) / 100 !== n) { setError("El sueldo solo admite hasta 2 decimales."); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) { setError("Indica la fecha desde la que cuenta el sueldo."); return; }
     void run(async () => { await onSetSalary(user, { salary: n, periodicity, startDate }); setEditing(false); }, "Sueldo guardado.");
   };
 
@@ -48,7 +51,7 @@ export default function PayrollSection({ user, payroll, onSetSalary, onPay }: Pr
 
       {editing ? (
         <form onSubmit={save} className="grid gap-3 sm:grid-cols-3">
-          <Field label="Sueldo por periodo (MXN)"><Input type="number" min="1" step="0.01" required value={salary} onChange={(e) => setSalary(e.target.value)} placeholder="0.00" /></Field>
+          <Field label="Sueldo por periodo (MXN)"><Input type="number" min="1" max="1000000" step="0.01" required value={salary} onChange={(e) => setSalary(e.target.value)} placeholder="0.00" /></Field>
           <Field label="Se paga"><Select value={periodicity} onChange={(e) => setPeriodicity(e.target.value as Periodicidad)}>{PERIODICIDADES.map((p) => <option key={p}>{p}</option>)}</Select></Field>
           <Field label="Cuenta desde"><Input type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
           <p className="text-[11px] text-slate-500 sm:col-span-3">Semanal: cada 7 días desde esa fecha · Quincenal: días 15 y último del mes · Mensual: último día del mes. Solo se genera adeudo a partir de “Cuenta desde”.</p>

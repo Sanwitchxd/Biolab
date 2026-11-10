@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Field, Input, Notice, Select, Workspace } from "../../components/ui/FormControls";
 import Modal from "../../components/ui/Modal";
 import { dateTimeLabel, relativeDay, timeLabel, type Payroll, type PayrollMethod, type Periodicidad, type StaffUser, type UserRole } from "./data";
+import { nameError, norm, USERNAME_RE, squash } from "../../utils/validation";
 import PayrollSection from "./PayrollSection";
 
 const initials = (name: string) => name.split(" ").map((p) => p[0]).slice(0, 2).join("");
@@ -47,11 +48,18 @@ export default function UsersPanel({ users, currentUserId, onAdd, onSetActive, p
     event.preventDefault();
     const formEl = event.currentTarget;
     const form = new FormData(formEl);
-    const name = String(form.get("name")).trim();
+    const name = squash(String(form.get("name")));
     const username = String(form.get("username")).trim();
     const password = String(form.get("password"));
     const role = String(form.get("role")) as UserRole;
-    if (!name || !username) return;
+    setError(""); setNotice("");
+    const nErr = nameError(name);
+    if (nErr) return setError(nErr);
+    if (username.length < 3 || !USERNAME_RE.test(username)) return setError("El usuario debe tener al menos 3 caracteres y solo letras, números, punto, guion y guion bajo (sin espacios).");
+    if (users.some((u) => norm(u.username) === norm(username))) return setError(`El usuario «${username}» ya existe. Elige otro.`);
+    if (password.length < 8) return setError("La contraseña debe tener al menos 8 caracteres.");
+    if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return setError("La contraseña debe combinar letras y números.");
+    if (norm(password) === norm(username)) return setError("La contraseña no puede ser igual al usuario.");
     setBusy(true); setError(""); setNotice("");
     try {
       await onAdd({ name, username, password, role });
@@ -77,9 +85,9 @@ export default function UsersPanel({ users, currentUserId, onAdd, onSetActive, p
       {error && <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600">{error}</p>}
 
       <form onSubmit={addUser} className="mb-6 grid gap-3 rounded-xl bg-slate-50 p-4 md:grid-cols-[1.4fr_0.8fr_0.8fr_0.8fr_auto]">
-        <Field label="Nombre"><Input name="name" required placeholder="Nombre completo" /></Field>
-        <Field label="Usuario"><Input name="username" required minLength={3} maxLength={30} autoComplete="off" placeholder="usuario01" /></Field>
-        <Field label="Contraseña"><Input name="password" type="password" required minLength={8} maxLength={72} autoComplete="new-password" placeholder="Mínimo 8" /></Field>
+        <Field label="Nombre"><Input name="name" required minLength={3} maxLength={100} placeholder="Nombre completo" /></Field>
+        <Field label="Usuario"><Input name="username" required minLength={3} maxLength={30} pattern="[A-Za-z0-9_.\-]+" title="Letras, números, punto, guion y guion bajo" autoComplete="off" placeholder="usuario01" /></Field>
+        <Field label="Contraseña"><Input name="password" type="password" required minLength={8} maxLength={72} autoComplete="new-password" placeholder="8+, letras y números" /></Field>
         <Field label="Rol"><Select name="role" defaultValue="Recepcionista"><option>Recepcionista</option><option>Químico</option><option>Gerencia</option></Select></Field>
         <Button type="submit" className="self-end" disabled={busy}>Agregar</Button>
       </form>

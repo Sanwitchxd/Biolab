@@ -1,6 +1,6 @@
 // Convierte las respuestas de /api/gerencia/* (columnas de MySQL) al modelo de la interfaz.
 import { patientCode } from "../reception/data";
-import type { Payroll, Periodicidad, LogEntry, LogKind, LogModule, Payment, PayMethod, PayType, StaffUser, StudyCount, UserRole } from "./data";
+import type { CatalogStudy, Payroll, Periodicidad, LogEntry, LogKind, LogModule, Payment, PayMethod, PayType, StaffUser, StudyCount, UserRole } from "./data";
 import { AREA_BY_ROLE } from "./data";
 
 export interface RawUsuario { id_usuario: number; nombre_completo: string; nombre_usuario: string; rol: "Gerente" | "Recepcionista" | "Químico"; estado: "Activo" | "Bloqueado"; ultimo_inicio: string | null }
@@ -72,4 +72,14 @@ export const mapNomina = (rows: RawNomina[]): Payroll[] =>
     userId: String(n.id_usuario), salary: n.salario, periodicity: n.periodicidad, startDate: n.fecha_inicio, pending: n.pendientes, owed: n.adeudo,
     nextPay: n.proximoPago, lastPay: n.ultimoPago,
     payments: n.pagos.map((p) => ({ id: p.id_pago_nomina, period: p.fecha_corresponde, amount: p.monto, method: p.metodo_pago, note: p.nota, at: new Date(p.fecha_hora), by: p.registro })),
+  }));
+
+export interface RawCatalogo {
+  estudios: { id_estudio: number; clave: string; nombre: string; precio: number; es_externo: boolean; activo: boolean; veces: number }[];
+  parametros: { id_parametro: number; id_estudio: number; nombre: string; unidad: string | null; rango_referencia: string | null; opciones: string | null }[];
+}
+export const mapCatalogo = (raw: RawCatalogo): CatalogStudy[] =>
+  raw.estudios.map((e) => ({
+    id: e.id_estudio, clave: e.clave, name: e.nombre, price: e.precio, external: e.es_externo, active: e.activo, timesOrdered: e.veces,
+    params: raw.parametros.filter((p) => p.id_estudio === e.id_estudio).map((p) => ({ id: p.id_parametro, name: p.nombre, unit: p.unidad ?? "", range: p.rango_referencia ?? "", options: p.opciones ?? "" })),
   }));

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Button, Field, Input, Notice, Textarea, Workspace } from "../../components/ui/FormControls";
 import Modal from "../../components/ui/Modal";
 import { dateLabel, dateTimeLabel, money, moneyExact } from "../../utils/format";
+import { nameError, onlyDigits, phoneError, squash } from "../../utils/validation";
 import { printHtml } from "../../utils/print";
 import { escapeHtml as esc } from "../../utils/escape";
 import { FLAG_STYLE, FLAG_TEXT } from "../../utils/reference";
@@ -85,7 +86,7 @@ export default function PatientsPanel({ store, focusPatientId, onClose }: { stor
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <button type="button" onClick={() => { setSelectedId(null); setNotice(""); }} className="text-xs font-semibold text-blue-600 hover:underline">← Volver al directorio</button>
           <div className="flex flex-wrap items-center gap-2">
-            {patient.whatsapp && <Button type="button" variant="success" className="!px-3 !py-1.5 !text-xs" onClick={() => { setWa({ text: "", at: "" }); setWaError(""); }}>Enviar WhatsApp</Button>}
+            {patient.whatsapp && digits(patient.phone).length === 10 && <Button type="button" variant="success" className="!px-3 !py-1.5 !text-xs" onClick={() => { setWa({ text: "", at: "" }); setWaError(""); }}>Enviar WhatsApp</Button>}
             <Button type="button" variant="secondary" className="!px-3 !py-1.5 !text-xs" disabled={lock.locked} title={lock.locked ? lock.reason : ""} onClick={() => { setEditing({ name: patient.name, phone: patient.phone, whatsapp: patient.whatsapp }); setEditError(""); }}>Editar datos</Button>
           </div>
         </div>
@@ -202,15 +203,23 @@ export default function PatientsPanel({ store, focusPatientId, onClose }: { stor
 
         {editing && (
           <Modal title="Editar datos del paciente" subtitle={patient.id} onClose={() => setEditing(null)}
-            footer={<><Button type="button" variant="secondary" onClick={() => setEditing(null)}>Cancelar</Button><Button type="button" disabled={editBusy || editing.name.trim().length < 3 || digits(editing.phone).length !== 10} onClick={async () => {
+            footer={<><Button type="button" variant="secondary" onClick={() => setEditing(null)}>Cancelar</Button><Button type="button" disabled={editBusy || Boolean(nameError(editing.name)) || Boolean(phoneError(digits(editing.phone)))} onClick={async () => {
               setEditBusy(true); setEditError("");
-              try { await store.updatePatient(patient.id, editing); setEditing(null); setNotice("Datos del paciente actualizados."); } catch (e) { setEditError(errorText(e)); } finally { setEditBusy(false); }
+              try { await store.updatePatient(patient.id, { ...editing, name: squash(editing.name), whatsapp: editing.whatsapp && digits(editing.phone).length === 10 }); setEditing(null); setNotice("Datos del paciente actualizados."); } catch (e) { setEditError(errorText(e)); } finally { setEditBusy(false); }
             }}>Guardar cambios</Button></>}>
             {editError && <p role="alert" className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-600">{editError}</p>}
             <div className="grid gap-4">
-              <Field label="Nombre completo"><Input value={editing.name} maxLength={100} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
-              <Field label="Teléfono (10 dígitos)"><Input value={editing.phone} inputMode="tel" onChange={(e) => setEditing({ ...editing, phone: e.target.value })} onBlur={() => setEditing((cur) => (cur ? { ...cur, phone: formatPhone(cur.phone) } : cur))} /></Field>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={editing.whatsapp} onChange={(e) => setEditing({ ...editing, whatsapp: e.target.checked })} className="h-4 w-4 accent-blue-500" /> Autoriza notificaciones por WhatsApp</label>
+              <Field label="Nombre completo">
+                <Input value={editing.name} maxLength={100} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
+                {editing.name.trim() !== "" && nameError(editing.name) && <span className="text-[11px] font-normal text-red-500">{nameError(editing.name)}</span>}
+              </Field>
+              <Field label="Teléfono (opcional, 10 dígitos)">
+                <Input value={digits(editing.phone)} inputMode="numeric" maxLength={10} onChange={(e) => { const d = onlyDigits(e.target.value, 10); setEditing({ ...editing, phone: d, whatsapp: d.length === 10 ? editing.whatsapp : false }); }} placeholder="Sin teléfono" />
+                {phoneError(digits(editing.phone)) && <span className="text-[11px] font-normal text-amber-600">{phoneError(digits(editing.phone))}</span>}
+              </Field>
+              {digits(editing.phone).length === 10
+                ? <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={editing.whatsapp} onChange={(e) => setEditing({ ...editing, whatsapp: e.target.checked })} className="h-4 w-4 accent-blue-500" /> Autoriza notificaciones por WhatsApp</label>
+                : <p className="text-xs text-slate-500">Sin teléfono completo no se pueden usar avisos por WhatsApp.</p>}
             </div>
           </Modal>
         )}

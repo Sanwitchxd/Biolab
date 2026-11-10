@@ -58,6 +58,7 @@ const roleNav: Record<ModulePage, NavItem[]> = {
   ],
   management: [
     { id: "users", label: "Gestión de usuarios", icon: "users" },
+    { id: "catalog", label: "Catálogo de estudios", icon: "sample" },
     { id: "logs", label: "Bitácora", icon: "log" },
     { id: "cash", label: "Corte de caja", icon: "cash" },
     { id: "stats", label: "Estadísticas globales", icon: "chart" },

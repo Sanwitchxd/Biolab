@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ManagementAction } from "../../types";
 import ModuleCard from "../../components/ui/ModuleCard";
+import CatalogPanel from "./CatalogPanel";
 import CashPanel from "./CashPanel";
 import LogsPanel from "./LogsPanel";
 import StatsPanel from "./StatsPanel";
@@ -12,6 +13,7 @@ import type { ManagementStore } from "./store";
 type Action = ManagementAction;
 const cards: { id: Action; title: string; description: string; actionLabel: string }[] = [
   { id: "users", title: "GESTIÓN DE USUARIOS", description: "Administración de cuentas, roles y control de acceso del personal.", actionLabel: "Administrar usuarios" },
+  { id: "catalog", title: "CATÁLOGO DE ESTUDIOS", description: "Alta y edición de estudios, precios y parámetros con sus valores de referencia.", actionLabel: "Administrar catálogo" },
   { id: "logs", title: "BITÁCORA INMUTABLE", description: "Registro de auditoría con filtros por día, mes, usuario y paciente.", actionLabel: "Consultar bitácora" },
   { id: "cash", title: "CORTE DE CAJA", description: "Caja en tiempo real, cierre seguro, rangos de fechas e historial de cortes.", actionLabel: "Abrir caja" },
   { id: "stats", title: "ESTADÍSTICAS GLOBALES", description: "Indicadores y gráficas de rendimiento ligadas a la caja.", actionLabel: "Ver indicadores" },
@@ -61,6 +63,7 @@ export default function Management({ store, currentUserId, onChatActivity, activ
       )}
 
       {active === "users" && <UsersPanel users={store.users} currentUserId={currentUserId} onAdd={store.addUser} onSetActive={store.setActive} payroll={store.payroll} onSetSalary={store.setSalary} onPay={store.payPeriod} now={now} onClose={() => setActive(null)} />}
+      {active === "catalog" && <CatalogPanel catalog={store.catalog} onCreate={store.createStudy} onUpdate={store.updateStudy} onClose={() => setActive(null)} />}
       {active === "logs" && <LogsPanel logs={store.logs} users={store.users} now={now} onClose={() => setActive(null)} />}
       {active === "cash" && <CashPanel payments={store.payments} cuts={cuts} now={now} onClose={() => setActive(null)} />}
       {active === "messages" && <ChatPanel onActivity={onChatActivity} onClose={() => setActive(null)} />}

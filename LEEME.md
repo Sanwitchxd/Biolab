@@ -64,3 +64,14 @@ Cambia las contraseñas de `database/CREDENCIALES.txt` antes de usar datos reale
   servidor). Para envío automático use `WHATSAPP_PROVIDER=cloudapi` con token de Meta (ver `backend/.env.example`); eso **sí requiere
   internet** y Meta limita el texto libre a 24 h desde el último mensaje del paciente.
 * **Laboratorio:** lista de muestras activas en incidencias, captura con opciones/rangos por estudio y semáforo alto/bajo.
+
+## Cambios de la revisión de validaciones y catálogo
+
+* **Gerencia → Catálogo de estudios (nuevo):** alta y edición de estudios (clave, nombre, precio, externo, activo) y de sus parámetros
+  (unidad, rango de referencia, opciones). Con búsqueda y filtros por tipo (Sangre, Orina, Heces, Otros, Externo).
+* **Recepción → Nueva cita:** el teléfono ya es opcional; solo admite números (máx. 10). La opción de WhatsApp aparece solo si hay un teléfono
+  completo. Los estudios se buscan por nombre/clave y se filtran por tipo. Validación de nombre, horario, fecha y abono (también en el servidor).
+* **Recepción → Pacientes:** mismas reglas al editar (teléfono opcional, sin WhatsApp si no hay teléfono).
+* **Gerencia → Usuarios y sueldos:** validación de nombre, usuario único, contraseña (8+ con letras y números) y montos.
+* **Actualización automática:** los tres perfiles se refrescan solos cada 8–12 s (y al volver a la pestaña); ya no hace falta recargar.
+* No se cambió la base de datos: no hay que reinstalarla. Solo reinicia el backend y el frontend.

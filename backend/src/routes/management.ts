@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { authenticate, hashContrasena } from "../auth/auth.js";
-import { withConnection } from "../database/db.js";
+import { withConnection, withTransaction } from "../database/db.js";
 import { HttpError } from "../middleware/errors.js";
 import { requireRole } from "../auth/roles.js";
 import { esFecha, fechaPagable, PERIODICIDADES, resumenNomina, type Periodicidad } from "../services/nomina.js";
@@ -13,6 +13,7 @@ import { esFecha, fechaPagable, PERIODICIDADES, resumenNomina, type Periodicidad
 export const managementRouter = Router();
 managementRouter.use(authenticate, requireRole("Gerente"));
 
+const NOMBRE_RE = /^[\p{L}][\p{L} .'’-]*$/u;
 const ROLES_USUARIO = ["Gerente", "Recepcionista", "Químico"] as const;
 
 function texto(valor: unknown, max: number, que: string, min = 1): string {
@@ -48,6 +49,7 @@ managementRouter.get("/usuarios", async (req, res) => {
 managementRouter.post("/usuarios", async (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
   const nombre = texto(b.nombre, 100, "El nombre", 3);
+  if (!NOMBRE_RE.test(nombre)) throw new HttpError(400, "El nombre solo puede llevar letras, espacios, punto, apóstrofo y guion.", "DATOS_INVALIDOS");
   const usuario = texto(b.usuario, 30, "El usuario", 3);
   if (!/^[A-Za-z0-9_.-]+$/.test(usuario)) {
     throw new HttpError(400, "El usuario solo puede llevar letras, números, punto, guion y guion bajo.", "DATOS_INVALIDOS");
@@ -97,6 +99,116 @@ managementRouter.post("/usuarios/:id/contrasena", async (req, res) => {
     return r.affectedRows;
   });
   if (filas === 0) throw new HttpError(404, "El usuario no existe.", "NO_ENCONTRADO");
+  res.json({ ok: true });
+});
+
+/* ------------------------- Catálogo de estudios (RF-21) ------------------------- */
+
+const CLAVE_RE = /^[A-Z0-9][A-Z0-9_-]{1,19}$/;
+
+interface ParametroEntrada { id: number | null; nombre: string; unidad: string | null; rango: string | null; opciones: string | null }
+
+function opcional(valor: unknown, max: number, que: string): string | null {
+  if (valor === undefined || valor === null) return null;
+  const t = String(valor).trim();
+  if (t === "") return null;
+  if (t.length > max) throw new HttpError(400, `${que} es demasiado largo (máximo ${max} caracteres).`, "DATOS_INVALIDOS");
+  return t;
+}
+
+function precioValido(valor: unknown): number {
+  const n = Number(valor);
+  if (!Number.isFinite(n) || n <= 0 || n > 1_000_000) throw new HttpError(400, "El precio debe ser mayor a 0 y no pasar de 1,000,000.", "DATOS_INVALIDOS");
+  return Math.round(n * 100) / 100;
+}
+
+function parametrosEntrada(valor: unknown): ParametroEntrada[] {
+  if (valor === undefined || valor === null) return [];
+  if (!Array.isArray(valor)) throw new HttpError(400, "Los parámetros no son válidos.", "DATOS_INVALIDOS");
+  if (valor.length > 40) throw new HttpError(400, "Un estudio admite máximo 40 parámetros.", "DATOS_INVALIDOS");
+  const lista = valor.map((x) => {
+    const p = (x ?? {}) as Record<string, unknown>;
+    const nombre = texto(p.nombre, 80, "El nombre del parámetro");
+    const opciones = opcional(p.opciones, 200, "Las opciones");
+    if (opciones && opciones.split(",").map((o) => o.trim()).filter(Boolean).length < 2) {
+      throw new HttpError(400, `El parámetro «${nombre}» necesita al menos 2 opciones separadas por coma.`, "DATOS_INVALIDOS");
+    }
+    return {
+      id: p.id === undefined || p.id === null ? null : idPositivo(p.id),
+      nombre, unidad: opcional(p.unidad, 20, "La unidad"), rango: opcional(p.rango, 60, "El rango de referencia"), opciones,
+    };
+  });
+  const nombres = lista.map((p) => p.nombre.toLowerCase());
+  if (new Set(nombres).size !== nombres.length) throw new HttpError(400, "Hay parámetros con el mismo nombre.", "DATOS_INVALIDOS");
+  return lista;
+}
+
+/** GET /api/gerencia/catalogo - TODOS los estudios (activos e inactivos) con sus parámetros y cuántas veces se han pedido. */
+managementRouter.get("/catalogo", async (req, res) => {
+  const { estudios, parametros } = await withConnection("Gerente", req.user!.id, async (conn) => {
+    const [e] = await conn.query<RowDataPacket[]>(
+      `SELECT e.id_estudio, e.clave, e.nombre, e.precio, e.es_externo, e.activo,
+              (SELECT COUNT(*) FROM DETALLE_ORDEN d WHERE d.id_estudio = e.id_estudio) AS veces
+         FROM ESTUDIO e ORDER BY e.nombre`,
+    );
+    const [p] = await conn.query<RowDataPacket[]>(
+      "SELECT id_parametro, id_estudio, nombre, unidad, rango_referencia, opciones FROM PARAMETRO_ESTUDIO ORDER BY id_parametro",
+    );
+    return { estudios: e, parametros: p };
+  });
+  res.json({
+    estudios: estudios.map((e) => ({ ...e, precio: Number(e.precio), es_externo: Boolean(e.es_externo), activo: Boolean(e.activo), veces: Number(e.veces) })),
+    parametros,
+  });
+});
+
+async function guardarParametros(conn: import("mysql2/promise").PoolConnection, idEstudio: number, lista: ParametroEntrada[]) {
+  const [actuales] = await conn.query<RowDataPacket[]>("SELECT id_parametro FROM PARAMETRO_ESTUDIO WHERE id_estudio = ?", [idEstudio]);
+  const propios = new Set(actuales.map((a) => a.id_parametro as number));
+  for (const p of lista) {
+    if (p.id !== null) {
+      if (!propios.has(p.id)) throw new HttpError(400, "Un parámetro no pertenece a este estudio.", "DATOS_INVALIDOS");
+      await conn.query("UPDATE PARAMETRO_ESTUDIO SET nombre = ?, unidad = ?, rango_referencia = ?, opciones = ? WHERE id_parametro = ?", [p.nombre, p.unidad, p.rango, p.opciones, p.id]);
+    } else {
+      await conn.query("INSERT INTO PARAMETRO_ESTUDIO (id_estudio, nombre, unidad, rango_referencia, opciones) VALUES (?, ?, ?, ?, ?)", [idEstudio, p.nombre, p.unidad, p.rango, p.opciones]);
+    }
+  }
+}
+
+/** POST /api/gerencia/catalogo { clave, nombre, precio, esExterno, parametros[] } - el trigger registra CREAR_ESTUDIO. */
+managementRouter.post("/catalogo", async (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const clave = texto(b.clave, 20, "La clave", 2).toUpperCase();
+  if (!CLAVE_RE.test(clave)) throw new HttpError(400, "La clave solo puede llevar letras, números, guion y guion bajo (2 a 20 caracteres).", "DATOS_INVALIDOS");
+  const nombre = texto(b.nombre, 100, "El nombre del estudio", 3);
+  const precio = precioValido(b.precio);
+  const externo = b.esExterno === true;
+  const parametros = parametrosEntrada(b.parametros);
+  const id = await withTransaction("Gerente", req.user!.id, async (conn) => {
+    const [dup] = await conn.query<RowDataPacket[]>("SELECT id_estudio FROM ESTUDIO WHERE clave = ?", [clave]);
+    if (dup[0]) throw new HttpError(409, `Ya existe un estudio con la clave ${clave}.`, "DUPLICADO");
+    const [r] = await conn.query<ResultSetHeader>("INSERT INTO ESTUDIO (clave, nombre, precio, es_externo) VALUES (?, ?, ?, ?)", [clave, nombre, precio, externo]);
+    await guardarParametros(conn, r.insertId, parametros.map((p) => ({ ...p, id: null })));
+    return r.insertId;
+  });
+  res.status(201).json({ id_estudio: id });
+});
+
+/** PUT /api/gerencia/catalogo/:id { nombre, precio, esExterno, activo, parametros[] } - el precio nuevo no cambia órdenes ya creadas. */
+managementRouter.put("/catalogo/:id", async (req, res) => {
+  const id = idPositivo(req.params.id);
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const nombre = texto(b.nombre, 100, "El nombre del estudio", 3);
+  const precio = precioValido(b.precio);
+  const parametros = parametrosEntrada(b.parametros);
+  await withTransaction("Gerente", req.user!.id, async (conn) => {
+    const [r] = await conn.query<ResultSetHeader>(
+      "UPDATE ESTUDIO SET nombre = ?, precio = ?, es_externo = ?, activo = ? WHERE id_estudio = ?",
+      [nombre, precio, b.esExterno === true, b.activo !== false, id],
+    );
+    if (r.affectedRows === 0) throw new HttpError(404, "El estudio no existe.", "NO_ENCONTRADO");
+    await guardarParametros(conn, id, parametros);
+  });
   res.json({ ok: true });
 });
 

@@ -28,6 +28,13 @@ export const AREA_BY_ROLE: Record<UserRole, string> = {
   Gerencia: "Dirección administrativa",
 };
 
+/* --------------------------- Catálogo de estudios --------------------------- */
+export interface CatalogParam { id: number | null; name: string; unit: string; range: string; options: string }
+export interface CatalogStudy {
+  id: number; clave: string; name: string; price: number; external: boolean; active: boolean; timesOrdered: number; params: CatalogParam[];
+}
+export interface CatalogInput { clave?: string; name: string; price: number; external: boolean; active: boolean; params: CatalogParam[] }
+
 /* --------------------------------- Pagos --------------------------------- */
 export interface Payment {
   id: string;

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../services/api";
-import type { Payroll, Periodicidad, PayrollMethod, LogEntry, Payment, StaffUser, StudyCount, UserRole } from "./data";
+import type { CatalogInput, CatalogStudy, Payroll, Periodicidad, PayrollMethod, LogEntry, Payment, StaffUser, StudyCount, UserRole } from "./data";
 import {
-  mapBitacora, mapEstudios, mapNomina, mapPagos, mapUsuarios,
-  type RawBitacora, type RawNomina, type RawEstudio, type RawPago, type RawUsuario,
+  mapBitacora, mapCatalogo, mapEstudios, mapNomina, mapPagos, mapUsuarios,
+  type RawBitacora, type RawCatalogo, type RawNomina, type RawEstudio, type RawPago, type RawUsuario,
 } from "./mapping";
 
-export interface ManagementData { users: StaffUser[]; logs: LogEntry[]; payments: Payment[]; studies: StudyCount[]; payroll: Payroll[] }
-const VACIO: ManagementData = { users: [], logs: [], payments: [], studies: [], payroll: [] };
+export interface ManagementData { users: StaffUser[]; logs: LogEntry[]; payments: Payment[]; studies: StudyCount[]; payroll: Payroll[]; catalog: CatalogStudy[] }
+const VACIO: ManagementData = { users: [], logs: [], payments: [], studies: [], payroll: [], catalog: [] };
 
 const ROL_API: Record<UserRole, string> = { Gerencia: "Gerente", Recepcionista: "Recepcionista", Químico: "Químico" };
 
@@ -18,14 +18,15 @@ export function useManagementStore() {
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const [u, b, c, e, n] = await Promise.all([
+    const [u, b, c, e, n, k] = await Promise.all([
       api<{ usuarios: RawUsuario[] }>("/gerencia/usuarios"),
       api<{ bitacora: RawBitacora[] }>("/gerencia/bitacora"),
       api<{ pagos: RawPago[] }>("/gerencia/caja"),
       api<{ estudios: RawEstudio[] }>("/gerencia/estadisticas"),
       api<{ empleados: RawNomina[] }>("/gerencia/nomina"),
+      api<RawCatalogo>("/gerencia/catalogo"),
     ]);
-    setData({ users: mapUsuarios(u.usuarios), logs: mapBitacora(b.bitacora), payments: mapPagos(c.pagos), studies: mapEstudios(e.estudios), payroll: mapNomina(n.empleados) });
+    setData({ users: mapUsuarios(u.usuarios), logs: mapBitacora(b.bitacora), payments: mapPagos(c.pagos), studies: mapEstudios(e.estudios), payroll: mapNomina(n.empleados), catalog: mapCatalogo(k) });
   }, []);
 
   const start = useCallback(() => {
@@ -57,7 +58,14 @@ export function useManagementStore() {
     await load();
   };
 
-  return { ...data, status, error, retry: start, reload: load, addUser, setActive, setSalary, payPeriod };
+  const body = (i: CatalogInput) => ({
+    ...(i.clave ? { clave: i.clave } : {}), nombre: i.name, precio: i.price, esExterno: i.external, activo: i.active,
+    parametros: i.params.map((p) => ({ id: p.id, nombre: p.name, unidad: p.unit, rango: p.range, opciones: p.options })),
+  });
+  const createStudy = async (input: CatalogInput) => { await api("/gerencia/catalogo", { body: body(input) }); await load(); };
+  const updateStudy = async (id: number, input: CatalogInput) => { await api(`/gerencia/catalogo/${id}`, { method: "PUT", body: body(input) }); await load(); };
+
+  return { ...data, status, error, retry: start, reload: load, addUser, setActive, setSalary, payPeriod, createStudy, updateStudy };
 }
 
 export type ManagementStore = ReturnType<typeof useManagementStore>;

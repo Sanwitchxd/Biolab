@@ -3,6 +3,7 @@ import { Button } from "../../components/ui/FormControls";
 import Shell from "../../components/layout/Shell";
 import { identityOf, type SessionUser } from "../../services/session";
 import { useChatSummary } from "../../services/chat";
+import { useAutoRefresh } from "../../services/autorefresh";
 import type { ManagementAction, RoleAction } from "../../types";
 import Management from "./Management";
 import { useManagementStore } from "./store";
@@ -20,6 +21,9 @@ export default function ManagementRoot({ user, onLogout }: { user: SessionUser; 
     reload().catch(() => { /* se conservan los datos que ya se muestran */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeAction]);
+
+  // Los cambios que hacen los otros perfiles aparecen solos, sin recargar la página.
+  useAutoRefresh(reload, status === "ready", 12000);
 
   return (
     <Shell activePage="management" identity={identityOf(user)} activeAction={activeAction} onAction={setActiveAction} onLogout={onLogout} badges={{ messages: chat.unread }}>
